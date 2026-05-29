@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+html,
+body {
+  background-color: #070912;
+  color: #e6e8f0;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(60rem 60rem at 85% -10%, rgba(109, 125, 255, 0.12), transparent 60%),
+    radial-gradient(50rem 50rem at -10% 10%, rgba(45, 212, 191, 0.08), transparent 55%);
+  background-attachment: fixed;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-ink-700/70 bg-ink-850/70 backdrop-blur;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+           text-sm font-medium transition-colors disabled:cursor-not-allowed
+           disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand-500 text-white hover:bg-brand-600;
+  }
+  .btn-ghost {
+    @apply btn border border-ink-700 bg-ink-800/60 text-ink-100 hover:bg-ink-700/60;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink-100/80;
+  }
+  .input {
+    @apply w-full rounded-xl border border-ink-700 bg-ink-900/70 px-3.5 py-2.5
+           text-sm text-white placeholder:text-ink-600 outline-none
+           focus:border-brand-500/70 focus:ring-2 focus:ring-brand-500/20;
+  }
+  .mono {
+    @apply font-mono text-[0.8rem] break-all;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-700
+           bg-ink-800/60 px-2.5 py-1 text-xs text-ink-100/80;
+  }
+}

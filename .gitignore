@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# secrets / env (never commit)
+.env
+.env.*
+!.env.example
+
+# build output
+web/.next/
+web/out/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+
+# misc
+.DS_Store
+*.log
