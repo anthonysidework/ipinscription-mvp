@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "./ConnectButton";
 import { networkLabel } from "@/lib/config";
+import { isDemo } from "@/lib/demo";
 
 const links = [
   { href: "/inscribe", label: "Inscribe" },
@@ -25,7 +26,10 @@ export function NavBar() {
           <span className="hidden text-sm font-semibold tracking-wide text-white sm:block">
             IP&nbsp;Inscription
           </span>
-          <span className="pill ml-1 hidden lg:inline-flex">{networkLabel}</span>
+          <span className="pill ml-1 hidden lg:inline-flex">
+            {networkLabel}
+            {isDemo ? " · demo" : ""}
+          </span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">

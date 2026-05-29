@@ -7,14 +7,16 @@ import {
   explorerTxUrl,
   ordinalsUrl,
 } from "@/lib/config";
+import { isDemo } from "@/lib/demo";
 import { InfoRow, CopyButton, formatTimestamp } from "./ui";
 import { IpfsPreview } from "./IpfsPreview";
 import { shorten } from "@/lib/hash";
 
 /**
- * Full Certificate of Inscription for the Bitcoin build. Shows the registry
- * record, the inscribed file (previewed from IPFS), and live links to the
- * Bitcoin transaction / ordinals explorer.
+ * Full Certificate of Inscription. Shows the record, a preview of the file, and
+ * links to the Bitcoin transaction / ordinals explorer. In demo mode the txid and
+ * storage are clearly marked as simulated/local rather than linked (the fake txid
+ * would 404 on a real explorer).
  */
 export function Certificate({
   rec,
@@ -23,6 +25,8 @@ export function Certificate({
   rec: InscriptionRecord;
   heading?: string;
 }) {
+  const demo = rec.demo ?? isDemo;
+
   return (
     <div className="card overflow-hidden">
       <div className="border-b border-ink-700/60 bg-gradient-to-r from-brand-600/20 to-accent-500/10 px-6 py-5">
@@ -35,7 +39,14 @@ export function Certificate({
               {rec.title || `Inscription #${rec.id}`}
             </h2>
           </div>
-          <span className="pill">#{rec.id}</span>
+          <div className="flex items-center gap-2">
+            {demo && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
+                simulated
+              </span>
+            )}
+            <span className="pill">#{rec.id}</span>
+          </div>
         </div>
         {rec.description && (
           <p className="mt-2 max-w-2xl text-sm text-ink-100/70">
@@ -51,62 +62,86 @@ export function Certificate({
           </p>
           <IpfsPreview
             cid={rec.cid}
+            dataUrl={rec.dataUrl}
             meta={{ mimeType: rec.mimeType, fileName: rec.fileName }}
           />
         </div>
 
         <div className="flex flex-col">
           {rec.type && <InfoRow label="Type">{rec.type}</InfoRow>}
-          <InfoRow label="Network">{rec.network}</InfoRow>
+          <InfoRow label="Network">
+            {rec.network}
+            {demo && <span className="text-ink-100/40"> (demo)</span>}
+          </InfoRow>
           <InfoRow label="Content hash (SHA-256)">
             <span className="mono">{shorten(rec.contentHash, 12, 10)}</span>
             <CopyButton value={rec.contentHash} />
           </InfoRow>
           <InfoRow label="Owner">
-            <a
-              href={explorerAddressUrl(rec.owner)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mono text-brand-400 hover:underline"
-            >
-              {shorten(rec.owner, 8, 6)}
-            </a>
+            {demo ? (
+              <span className="mono">{shorten(rec.owner, 8, 6)}</span>
+            ) : (
+              <a
+                href={explorerAddressUrl(rec.owner)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mono text-brand-400 hover:underline"
+              >
+                {shorten(rec.owner, 8, 6)}
+              </a>
+            )}
             <CopyButton value={rec.owner} />
           </InfoRow>
           <InfoRow label="Inscribed">{formatTimestamp(rec.timestamp)}</InfoRow>
-          <InfoRow label="File (IPFS)">
-            <a
-              href={ipfsToHttp(rec.cid)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand-400 hover:underline"
-            >
-              {shorten(rec.cid, 8, 6)} ↗
-            </a>
-            <CopyButton value={rec.cid} />
-          </InfoRow>
-          <InfoRow label="Metadata (IPFS)">
-            <a
-              href={ipfsToHttp(rec.metadataURI)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand-400 hover:underline"
-            >
-              open ↗
-            </a>
-          </InfoRow>
+
+          {demo ? (
+            <InfoRow label="Storage">Stored locally in your browser</InfoRow>
+          ) : (
+            <>
+              <InfoRow label="File (IPFS)">
+                <a
+                  href={ipfsToHttp(rec.cid)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-400 hover:underline"
+                >
+                  {shorten(rec.cid, 8, 6)} ↗
+                </a>
+                <CopyButton value={rec.cid} />
+              </InfoRow>
+              <InfoRow label="Metadata (IPFS)">
+                <a
+                  href={ipfsToHttp(rec.metadataURI)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-400 hover:underline"
+                >
+                  open ↗
+                </a>
+              </InfoRow>
+            </>
+          )}
+
           <InfoRow label="Bitcoin tx">
-            <a
-              href={explorerTxUrl(rec.txid)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand-400 hover:underline"
-            >
-              {shorten(rec.txid, 8, 6)} ↗
-            </a>
+            {demo ? (
+              <span className="mono">
+                {shorten(rec.txid, 8, 6)}
+                <span className="text-ink-100/40"> (simulated)</span>
+              </span>
+            ) : (
+              <a
+                href={explorerTxUrl(rec.txid)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-400 hover:underline"
+              >
+                {shorten(rec.txid, 8, 6)} ↗
+              </a>
+            )}
             <CopyButton value={rec.txid} />
           </InfoRow>
-          {rec.inscriptionId && (
+
+          {!demo && rec.inscriptionId && (
             <InfoRow label="Inscription">
               <a
                 href={ordinalsUrl(rec.inscriptionId)}

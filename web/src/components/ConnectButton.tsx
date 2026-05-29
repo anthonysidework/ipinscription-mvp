@@ -2,8 +2,9 @@
 
 import { useWallet } from "@/lib/wallet";
 import { shorten } from "@/lib/hash";
+import { isDemo } from "@/lib/demo";
 
-/** Connect / disconnect control for the Bitcoin wallet (Xverse via sats-connect). */
+/** Connect / disconnect control for the Bitcoin wallet (or the demo wallet). */
 export function ConnectButton() {
   const { isConnected, ordinalsAddress, connect, disconnect, connecting } =
     useWallet();
@@ -19,7 +20,11 @@ export function ConnectButton() {
 
   return (
     <button onClick={connect} className="btn-primary" disabled={connecting}>
-      {connecting ? "Connecting…" : "Connect Wallet"}
+      {connecting
+        ? "Connecting…"
+        : isDemo
+          ? "Connect (demo)"
+          : "Connect Wallet"}
     </button>
   );
 }

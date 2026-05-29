@@ -6,9 +6,9 @@ export type InscriptionRecord = {
   id: number;
   /** SHA-256 of the file bytes, 0x-prefixed hex. The registry key. */
   contentHash: string;
-  /** IPFS CID of the original file. */
+  /** IPFS CID of the original file (or a synthetic id in demo mode). */
   cid: string;
-  /** IPFS URI of the metadata JSON. */
+  /** IPFS URI of the metadata JSON (or a synthetic id in demo mode). */
   metadataURI: string;
   /** Creator's Bitcoin ordinals address. */
   owner: string;
@@ -26,6 +26,13 @@ export type InscriptionRecord = {
   type?: string;
   fileName?: string;
   mimeType?: string;
+  /**
+   * Demo-only: a data URL of the file kept locally so the demo can preview it
+   * without IPFS. Never set in real mode.
+   */
+  dataUrl?: string;
+  /** True when this record was produced by the simulated demo flow. */
+  demo?: boolean;
 };
 
 /** Payload accepted by POST /api/registry to add a record. */

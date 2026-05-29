@@ -10,6 +10,7 @@ import { hashFile, shorten } from "@/lib/hash";
 import { pinFile, pinJson } from "@/lib/ipfs";
 import { addRecord, verifyByHash } from "@/lib/registryClient";
 import { networkType, networkLabel } from "@/lib/config";
+import { isDemo, fileToDataUrl } from "@/lib/demo";
 import type { InscriptionRecord } from "@/lib/types";
 
 type Stage =
@@ -35,6 +36,14 @@ const STAGE_LABELS: Record<Stage, string> = {
   error: "Something went wrong",
 };
 
+const DEMO_LABELS: Record<Stage, string> = {
+  ...STAGE_LABELS,
+  "uploading-file": "Preparing local preview…",
+  "uploading-meta": "Building metadata…",
+  inscribing: "Simulating Bitcoin inscription…",
+  indexing: "Saving to your demo registry…",
+};
+
 const STEP_ORDER: Stage[] = [
   "hashing",
   "uploading-file",
@@ -44,12 +53,20 @@ const STEP_ORDER: Stage[] = [
   "done",
 ];
 
+function labelFor(s: Stage): string {
+  return (isDemo ? DEMO_LABELS : STAGE_LABELS)[s];
+}
+
 export default function InscribePage() {
   return (
     <div>
       <PageHeader
         title="Inscribe"
-        subtitle={`Upload a file to inscribe a permanent proof of authorship on ${networkLabel}.`}
+        subtitle={
+          isDemo
+            ? "Demo mode: hashing is real; the inscription is simulated. Upload a file to try the full flow — no wallet or funds needed."
+            : `Upload a file to inscribe a permanent proof of authorship on ${networkLabel}.`
+        }
       />
       <WalletGate>
         <InscribeForm />
@@ -99,7 +116,7 @@ function InscribeForm() {
     setTxid(undefined);
 
     try {
-      // 1. Hash locally.
+      // 1. Hash locally (real in both modes).
       setStage("hashing");
       const contentHash = await hashFile(file);
 
@@ -112,25 +129,37 @@ function InscribeForm() {
         );
       }
 
-      // 3. Pin the file.
-      setStage("uploading-file");
-      const { cid } = await pinFile(file);
+      // 3 + 4. Store the file + metadata. Real mode pins to IPFS; demo mode keeps
+      //        a local data-URL preview and uses synthetic ids.
+      let cid: string;
+      let metadataURI: string;
+      let dataUrl: string | undefined;
 
-      // 4. Pin the metadata JSON.
-      setStage("uploading-meta");
-      const { cid: metaCid } = await pinJson({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        type: type.trim() || undefined,
-        contentHash,
-        fileName: file.name,
-        mimeType: file.type || undefined,
-      });
-      const metadataURI = `ipfs://${metaCid}`;
+      if (isDemo) {
+        setStage("uploading-file");
+        dataUrl = await fileToDataUrl(file);
+        const short = contentHash.slice(2, 14);
+        cid = `demo-${short}`;
+        setStage("uploading-meta");
+        metadataURI = `demo-meta-${short}`;
+      } else {
+        setStage("uploading-file");
+        cid = (await pinFile(file)).cid;
+        setStage("uploading-meta");
+        const metaCid = (
+          await pinJson({
+            title: title.trim(),
+            description: description.trim() || undefined,
+            type: type.trim() || undefined,
+            contentHash,
+            fileName: file.name,
+            mimeType: file.type || undefined,
+          })
+        ).cid;
+        metadataURI = `ipfs://${metaCid}`;
+      }
 
-      // 5. Inscribe a compact JSON proof onto Bitcoin. The inscription content is
-      //    small (hash + IPFS pointers), so on-chain cost stays low while the file
-      //    itself lives on IPFS.
+      // 5. Inscribe (simulated in demo; real wallet call otherwise).
       setStage("inscribing");
       const proof = JSON.stringify({
         p: "ip-inscription",
@@ -148,7 +177,7 @@ function InscribeForm() {
       });
       setTxid(txId);
 
-      // 6. Record it in our index so Explore + Verify can find it.
+      // 6. Record it so Explore + Verify can find it.
       setStage("indexing");
       const record = await addRecord({
         contentHash,
@@ -163,6 +192,8 @@ function InscribeForm() {
         type: type.trim() || undefined,
         fileName: file.name,
         mimeType: file.type || undefined,
+        dataUrl,
+        demo: isDemo,
       });
 
       setResult(record);
@@ -189,8 +220,9 @@ function InscribeForm() {
     return (
       <div className="flex flex-col gap-6">
         <div className="rounded-xl border border-accent-500/40 bg-accent-500/10 px-4 py-3 text-sm text-accent-400">
-          ✓ Inscribed on {networkType} at {formatTimestamp(result.timestamp)}. The
-          Bitcoin transaction may take a few minutes to confirm.
+          {isDemo
+            ? `✓ Simulated inscription recorded at ${formatTimestamp(result.timestamp)}. In real mode this would be a live Bitcoin transaction.`
+            : `✓ Inscribed on ${networkType} at ${formatTimestamp(result.timestamp)}. The Bitcoin transaction may take a few minutes to confirm.`}
         </div>
         <Certificate rec={result} />
         <div className="flex flex-wrap gap-3">
@@ -288,20 +320,22 @@ function InscribeForm() {
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
-        <div>
-          <label className="label" htmlFor="fee">
-            Miner fee rate (sats/vB, optional)
-          </label>
-          <input
-            id="fee"
-            type="number"
-            min="1"
-            className="input"
-            placeholder="leave blank to let the wallet choose"
-            value={feeRate}
-            onChange={(e) => setFeeRate(e.target.value)}
-          />
-        </div>
+        {!isDemo && (
+          <div>
+            <label className="label" htmlFor="fee">
+              Miner fee rate (sats/vB, optional)
+            </label>
+            <input
+              id="fee"
+              type="number"
+              min="1"
+              className="input"
+              placeholder="leave blank to let the wallet choose"
+              value={feeRate}
+              onChange={(e) => setFeeRate(e.target.value)}
+            />
+          </div>
+        )}
 
         <button
           type="submit"
@@ -309,7 +343,7 @@ function InscribeForm() {
           disabled={!file || !title.trim() || busy}
         >
           {busy ? <Spinner /> : null}
-          {busy ? STAGE_LABELS[stage] : "Inscribe on Bitcoin"}
+          {busy ? labelFor(stage) : isDemo ? "Inscribe (demo)" : "Inscribe on Bitcoin"}
         </button>
 
         {busy && <ProgressSteps stage={stage} />}
@@ -345,7 +379,7 @@ function ProgressSteps({ stage }: { stage: Stage }) {
               {done ? "✓" : i + 1}
             </span>
             <span className={active ? "text-white" : "text-ink-100/50"}>
-              {STAGE_LABELS[s]}
+              {labelFor(s)}
             </span>
           </li>
         );

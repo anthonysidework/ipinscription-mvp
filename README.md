@@ -3,13 +3,33 @@
 Inscribe a piece of IP onto **Bitcoin** and get a verifiable, timestamped,
 tamper-proof proof of authorship that anyone can independently verify.
 
-This is a real, working MVP on a Bitcoin test network (**Signet** by default):
-real wallet, real client-side hashing, real IPFS storage, real on-chain Ordinals
-inscriptions.
+It ships two ways from one codebase:
 
-> ⚠️ **Testnet only. Experimental.** No legal claim of IP ownership is made — an
-> inscription records that an address committed a content hash to Bitcoin at a
-> point in time. Not legal advice.
+- **Demo mode (default, zero-config)** — deploy to Vercel with **no env vars** and
+  anyone can click the entire loop instantly: no wallet extension, no Signet BTC,
+  no API keys. SHA-256 hashing is **real**; the wallet connect + Bitcoin
+  inscription are **simulated** (realistic-looking txid/address) and records are
+  saved in the visitor's own browser. A banner makes this explicit. This is the
+  testable demo URL.
+- **Real mode** (`NEXT_PUBLIC_DEMO_MODE=false`) — real Xverse wallet on a Bitcoin
+  test network (**Signet** by default), real IPFS pinning via Pinata, real
+  on-chain Ordinals inscriptions, shared registry via Upstash KV.
+
+> ⚠️ **Testnet/demo only. Experimental.** No legal claim of IP ownership is made —
+> a real inscription records that an address committed a content hash to Bitcoin
+> at a point in time. Demo inscriptions are simulated. Not legal advice.
+
+---
+
+## Quickest path: deploy the demo to Vercel (no setup)
+
+1. Push to GitHub → Vercel **New Project → import the repo**.
+2. **Root Directory = `web`**. Framework auto-detects as Next.js.
+3. **Deploy with no environment variables.** That's it — the live URL runs in demo
+   mode, and anyone can connect → inscribe → explore → verify end-to-end.
+
+To later make it real, set `NEXT_PUBLIC_DEMO_MODE=false` plus `PINATA_JWT` and
+Upstash credentials (see *Deploy to Vercel* below).
 
 ---
 

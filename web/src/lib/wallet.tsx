@@ -1,11 +1,14 @@
 "use client";
 
 /**
- * Bitcoin wallet context using sats-connect (Xverse and compatible wallets).
+ * Bitcoin wallet context.
  *
- * Exposes the connected ordinals + payment addresses and a `connect`/`disconnect`
- * pair, plus an `inscribe` helper that wraps `createInscription`. Connection is
- * persisted to localStorage so a refresh keeps the session.
+ * In DEMO MODE (default) connect + inscribe are simulated: connecting returns a
+ * stable fake Signet address kept in localStorage, and inscribing returns a fake
+ * txid after a short delay — no extension, no funds, no popups.
+ *
+ * In real mode it uses sats-connect (Xverse and compatible): connect requests the
+ * ordinals + payment addresses; inscribe wraps createInscription.
  */
 import {
   createContext,
@@ -18,6 +21,7 @@ import {
 } from "react";
 import { getAddress, createInscription, AddressPurpose } from "sats-connect";
 import { networkType, appFeeSats, appFeeAddress } from "./config";
+import { isDemo, fakeTaprootAddress, fakeTxid, wait } from "./demo";
 
 type WalletState = {
   ordinalsAddress: string | null;
@@ -37,6 +41,7 @@ type WalletState = {
 };
 
 const STORAGE_KEY = "ip-wallet";
+const DEMO_ADDR_KEY = "ip-demo-addr";
 
 const WalletContext = createContext<WalletState | null>(null);
 
@@ -62,9 +67,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /** Stable per-browser fake address for demo mode. */
+  const demoAddress = useCallback((): string => {
+    try {
+      const saved = localStorage.getItem(DEMO_ADDR_KEY);
+      if (saved) return saved;
+      const addr = fakeTaprootAddress();
+      localStorage.setItem(DEMO_ADDR_KEY, addr);
+      return addr;
+    } catch {
+      return fakeTaprootAddress();
+    }
+  }, []);
+
+  const persist = useCallback((ord: string | null, pay: string | null) => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ network: networkType, ordinalsAddress: ord, paymentAddress: pay })
+      );
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const connect = useCallback(async () => {
     setConnecting(true);
     setError(null);
+
+    // Demo: instantly "connect" with a stable fake address.
+    if (isDemo) {
+      await wait(450);
+      const addr = demoAddress();
+      setOrdinals(addr);
+      setPayment(addr);
+      persist(addr, addr);
+      setConnecting(false);
+      return;
+    }
+
     try {
       await getAddress({
         payload: {
@@ -81,18 +122,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           );
           setOrdinals(ord?.address ?? null);
           setPayment(pay?.address ?? null);
-          try {
-            localStorage.setItem(
-              STORAGE_KEY,
-              JSON.stringify({
-                network: networkType,
-                ordinalsAddress: ord?.address ?? null,
-                paymentAddress: pay?.address ?? null,
-              })
-            );
-          } catch {
-            /* ignore */
-          }
+          persist(ord?.address ?? null, pay?.address ?? null);
         },
         onCancel: () => setError("Connection request was cancelled."),
       });
@@ -105,7 +135,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setConnecting(false);
     }
-  }, []);
+  }, [demoAddress, persist]);
 
   const disconnect = useCallback(() => {
     setOrdinals(null);
@@ -118,8 +148,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const inscribe = useCallback<WalletState["inscribe"]>(
-    ({ content, contentType, payloadType, feeRate }) =>
-      new Promise<string>((resolve, reject) => {
+    async ({ content, contentType, payloadType, feeRate }) => {
+      // Demo: simulate signing + broadcasting.
+      if (isDemo) {
+        await wait(900);
+        return fakeTxid();
+      }
+      return new Promise<string>((resolve, reject) => {
         createInscription({
           payload: {
             network: { type: networkType },
@@ -136,7 +171,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }).catch((e) =>
           reject(e instanceof Error ? new Error(humanize(e.message)) : e)
         );
-      }),
+      });
+    },
     []
   );
 

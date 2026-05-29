@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { networkLabel } from "@/lib/config";
+import { isDemo } from "@/lib/demo";
 
 export default function LandingPage() {
   return (
     <div className="flex flex-col items-center gap-12 py-10 text-center">
       <div className="max-w-2xl">
         <span className="pill mx-auto mb-5">
-          On-chain proof of authorship · {networkLabel} · Ordinals
+          On-chain proof of authorship · {networkLabel}
+          {isDemo ? " · demo" : " · Ordinals"}
         </span>
         <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Inscribe your IP.
@@ -21,6 +23,13 @@ export default function LandingPage() {
           locally with SHA-256, pinned to IPFS, and inscribed on-chain via your
           Bitcoin wallet — anyone can verify it.
         </p>
+        {isDemo && (
+          <p className="mx-auto mt-3 max-w-xl text-sm text-amber-200/80">
+            You&apos;re in <span className="font-medium">demo mode</span>: try the
+            entire flow right now — no wallet, no funds, no setup. Hashing is real;
+            the inscription is simulated and saved in your browser.
+          </p>
+        )}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link href="/app" className="btn-primary px-6 py-3 text-base">
             Launch App
@@ -54,7 +63,9 @@ export default function LandingPage() {
       </div>
 
       <p className="text-xs text-ink-100/40">
-        Testnet only · experimental · not legal advice
+        {isDemo
+          ? "Demo · simulated inscriptions · not legal advice"
+          : "Testnet only · experimental · not legal advice"}
       </p>
     </div>
   );
