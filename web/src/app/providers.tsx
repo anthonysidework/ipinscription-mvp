@@ -1,28 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { WagmiProvider } from "wagmi";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
-import "@rainbow-me/rainbowkit/styles.css";
-import { wagmiConfig } from "@/lib/wagmi";
+import type { ReactNode } from "react";
+import { WalletProvider } from "@/lib/wallet";
 
+/** Top-level client providers. Bitcoin wallet (sats-connect) context. */
 export function Providers({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
-
-  return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider
-          theme={darkTheme({
-            accentColor: "#6d7dff",
-            accentColorForeground: "white",
-            borderRadius: "medium",
-          })}
-        >
-          {children}
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
-  );
+  return <WalletProvider>{children}</WalletProvider>;
 }

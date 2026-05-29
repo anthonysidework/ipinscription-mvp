@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ConnectButton } from "./ConnectButton";
+import { networkLabel } from "@/lib/config";
 
 const links = [
   { href: "/inscribe", label: "Inscribe" },
@@ -24,6 +25,7 @@ export function NavBar() {
           <span className="hidden text-sm font-semibold tracking-wide text-white sm:block">
             IP&nbsp;Inscription
           </span>
+          <span className="pill ml-1 hidden lg:inline-flex">{networkLabel}</span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
@@ -45,11 +47,7 @@ export function NavBar() {
           })}
         </nav>
 
-        <ConnectButton
-          accountStatus="address"
-          chainStatus="icon"
-          showBalance={false}
-        />
+        <ConnectButton />
       </div>
     </header>
   );

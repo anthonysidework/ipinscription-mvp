@@ -1,12 +1,11 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader, Spinner, ErrorNote, EmptyState } from "@/components/ui";
 import { Certificate } from "@/components/Certificate";
-import { useInscription } from "@/lib/useRegistry";
-import { useTotal } from "@/lib/useRegistry";
-import { isContractConfigured } from "@/lib/config";
+import { getRecord } from "@/lib/registryClient";
+import type { InscriptionRecord } from "@/lib/types";
 
 export default function InscriptionDetailPage({
   params,
@@ -14,15 +13,25 @@ export default function InscriptionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const parsed = /^\d+$/.test(id) ? BigInt(id) : undefined;
+  const valid = /^\d+$/.test(id);
 
-  const { data: total } = useTotal();
-  const inRange =
-    parsed !== undefined && total !== undefined ? parsed < total : true;
-
-  const { record, isLoading, error } = useInscription(
-    inRange ? parsed : undefined
+  const [record, setRecord] = useState<InscriptionRecord | null>(null);
+  const [status, setStatus] = useState<"loading" | "ok" | "missing" | "error">(
+    valid ? "loading" : "error"
   );
+
+  useEffect(() => {
+    if (!valid) return;
+    getRecord(Number(id))
+      .then((r) => {
+        if (!r) setStatus("missing");
+        else {
+          setRecord(r);
+          setStatus("ok");
+        }
+      })
+      .catch(() => setStatus("error"));
+  }, [id, valid]);
 
   return (
     <div>
@@ -36,18 +45,16 @@ export default function InscriptionDetailPage({
         }
       />
 
-      {!isContractConfigured ? (
-        <ErrorNote message="Contract address not configured (NEXT_PUBLIC_CONTRACT_ADDRESS)." />
-      ) : parsed === undefined ? (
+      {!valid ? (
         <ErrorNote message="Invalid inscription id." />
-      ) : !inRange ? (
+      ) : status === "missing" ? (
         <EmptyState
           title="Not found"
-          description={`No inscription with id #${id} exists on the registry.`}
+          description={`No inscription with id #${id} exists in the registry.`}
         />
-      ) : error ? (
-        <ErrorNote message="Failed to load this inscription from chain." />
-      ) : isLoading || !record ? (
+      ) : status === "error" ? (
+        <ErrorNote message="Failed to load this inscription." />
+      ) : status === "loading" || !record ? (
         <div className="flex items-center gap-2 text-sm text-ink-100/60">
           <Spinner /> Loading certificate…
         </div>

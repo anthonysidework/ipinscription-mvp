@@ -1,49 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { IndexedInscription } from "@/lib/useRegistry";
-import { ipfsToHttp, explorerAddressUrl, explorerTxUrl } from "@/lib/config";
+import type { InscriptionRecord } from "@/lib/types";
+import {
+  ipfsToHttp,
+  explorerAddressUrl,
+  explorerTxUrl,
+  ordinalsUrl,
+} from "@/lib/config";
 import { InfoRow, CopyButton, formatTimestamp } from "./ui";
 import { IpfsPreview } from "./IpfsPreview";
 import { shorten } from "@/lib/hash";
 
-type MetaJson = {
-  title?: string;
-  description?: string;
-  type?: string;
-  fileName?: string;
-  mimeType?: string;
-  contentHash?: string;
-};
-
 /**
- * Full Certificate of Inscription. Shows the on-chain record plus the metadata
- * fetched from IPFS and a preview of the inscribed file. Optionally renders a
- * transaction link when known (e.g. right after inscribing).
+ * Full Certificate of Inscription for the Bitcoin build. Shows the registry
+ * record, the inscribed file (previewed from IPFS), and live links to the
+ * Bitcoin transaction / ordinals explorer.
  */
 export function Certificate({
   rec,
-  txHash,
   heading = "Certificate of Inscription",
 }: {
-  rec: IndexedInscription;
-  txHash?: string;
+  rec: InscriptionRecord;
   heading?: string;
 }) {
-  const [meta, setMeta] = useState<MetaJson | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!rec.metadataURI) return;
-    fetch(ipfsToHttp(rec.metadataURI))
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => !cancelled && setMeta(j))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [rec.metadataURI]);
-
   return (
     <div className="card overflow-hidden">
       <div className="border-b border-ink-700/60 bg-gradient-to-r from-brand-600/20 to-accent-500/10 px-6 py-5">
@@ -53,14 +32,14 @@ export function Certificate({
               {heading}
             </p>
             <h2 className="mt-1 text-xl font-semibold text-white">
-              {meta?.title || `Inscription #${rec.id.toString()}`}
+              {rec.title || `Inscription #${rec.id}`}
             </h2>
           </div>
-          <span className="pill">#{rec.id.toString()}</span>
+          <span className="pill">#{rec.id}</span>
         </div>
-        {meta?.description && (
+        {rec.description && (
           <p className="mt-2 max-w-2xl text-sm text-ink-100/70">
-            {meta.description}
+            {rec.description}
           </p>
         )}
       </div>
@@ -70,12 +49,16 @@ export function Certificate({
           <p className="mb-2 text-xs uppercase tracking-wide text-ink-100/40">
             Inscribed file
           </p>
-          <IpfsPreview cid={rec.cid} meta={meta ?? undefined} />
+          <IpfsPreview
+            cid={rec.cid}
+            meta={{ mimeType: rec.mimeType, fileName: rec.fileName }}
+          />
         </div>
 
         <div className="flex flex-col">
-          {meta?.type && <InfoRow label="Type">{meta.type}</InfoRow>}
-          <InfoRow label="Content hash">
+          {rec.type && <InfoRow label="Type">{rec.type}</InfoRow>}
+          <InfoRow label="Network">{rec.network}</InfoRow>
+          <InfoRow label="Content hash (SHA-256)">
             <span className="mono">{shorten(rec.contentHash, 12, 10)}</span>
             <CopyButton value={rec.contentHash} />
           </InfoRow>
@@ -90,9 +73,7 @@ export function Certificate({
             </a>
             <CopyButton value={rec.owner} />
           </InfoRow>
-          <InfoRow label="Timestamp">
-            {formatTimestamp(rec.timestamp)}
-          </InfoRow>
+          <InfoRow label="Inscribed">{formatTimestamp(rec.timestamp)}</InfoRow>
           <InfoRow label="File (IPFS)">
             <a
               href={ipfsToHttp(rec.cid)}
@@ -114,15 +95,26 @@ export function Certificate({
               open ↗
             </a>
           </InfoRow>
-          {txHash && (
-            <InfoRow label="Transaction">
+          <InfoRow label="Bitcoin tx">
+            <a
+              href={explorerTxUrl(rec.txid)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand-400 hover:underline"
+            >
+              {shorten(rec.txid, 8, 6)} ↗
+            </a>
+            <CopyButton value={rec.txid} />
+          </InfoRow>
+          {rec.inscriptionId && (
+            <InfoRow label="Inscription">
               <a
-                href={explorerTxUrl(txHash)}
+                href={ordinalsUrl(rec.inscriptionId)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-brand-400 hover:underline"
               >
-                {shorten(txHash, 8, 6)} ↗
+                {shorten(rec.inscriptionId, 8, 6)} ↗
               </a>
             </InfoRow>
           )}

@@ -1,49 +1,46 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader, EmptyState, Spinner, ErrorNote } from "@/components/ui";
 import { InscriptionCard } from "@/components/InscriptionCard";
-import { useTotal, useInscriptionsByIds } from "@/lib/useRegistry";
-import { isContractConfigured } from "@/lib/config";
+import { listRecords } from "@/lib/registryClient";
+import type { InscriptionRecord } from "@/lib/types";
 
 const PAGE_SIZE = 9;
 
 export default function ExplorePage() {
-  const { data: total, isLoading: totalLoading, error } = useTotal();
   const [page, setPage] = useState(0);
+  const [total, setTotal] = useState<number | null>(null);
+  const [records, setRecords] = useState<InscriptionRecord[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const count = total ? Number(total) : 0;
-  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  useEffect(() => {
+    setRecords(null);
+    setError(null);
+    listRecords(page * PAGE_SIZE, PAGE_SIZE)
+      .then((r) => {
+        setTotal(r.total);
+        setRecords(r.records);
+      })
+      .catch((e) => setError(e.message));
+  }, [page]);
 
-  // Show newest first: ids count-1 .. 0, sliced to the page.
-  const ids = useMemo(() => {
-    if (!count) return [];
-    const start = count - 1 - page * PAGE_SIZE;
-    const out: bigint[] = [];
-    for (let i = start; i > start - PAGE_SIZE && i >= 0; i--) {
-      out.push(BigInt(i));
-    }
-    return out;
-  }, [count, page]);
-
-  const { records, isLoading } = useInscriptionsByIds(ids);
+  const pageCount = total ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1;
 
   return (
     <div>
       <PageHeader
         title="Explore"
-        subtitle="The full public registry of inscriptions on the contract."
+        subtitle="The public registry of inscriptions made through the app."
       />
 
-      {!isContractConfigured ? (
-        <ErrorNote message="Contract address not configured (NEXT_PUBLIC_CONTRACT_ADDRESS)." />
-      ) : error ? (
-        <ErrorNote message="Failed to read the registry from chain." />
-      ) : totalLoading ? (
+      {error ? (
+        <ErrorNote message={error} />
+      ) : records === null ? (
         <div className="flex items-center gap-2 text-sm text-ink-100/60">
           <Spinner /> Loading registry…
         </div>
-      ) : count === 0 ? (
+      ) : total === 0 ? (
         <EmptyState
           title="Registry is empty"
           description="No inscriptions have been recorded yet. Be the first."
@@ -51,23 +48,17 @@ export default function ExplorePage() {
       ) : (
         <>
           <div className="mb-4 flex items-center justify-between text-sm text-ink-100/60">
-            <span>{count} total inscriptions</span>
+            <span>{total} total inscriptions</span>
             <span>
               Page {page + 1} / {pageCount}
             </span>
           </div>
 
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-ink-100/60">
-              <Spinner /> Loading page…
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {records?.map((rec) => (
-                <InscriptionCard key={rec.id.toString()} rec={rec} />
-              ))}
-            </div>
-          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {records.map((rec) => (
+              <InscriptionCard key={rec.id} rec={rec} />
+            ))}
+          </div>
 
           <div className="mt-6 flex items-center justify-center gap-3">
             <button

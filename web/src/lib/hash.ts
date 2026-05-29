@@ -1,23 +1,36 @@
 /**
- * Client-side content hashing. We hash the raw file bytes with keccak256 — the
- * same hash the contract stores — so a file can later be verified byte-for-byte.
+ * Client-side content hashing. For the Bitcoin build we use SHA-256 (Bitcoin's
+ * native hash) over the raw file bytes, computed in the browser with the Web
+ * Crypto API — no dependencies. The same hash keys the registry index, so a file
+ * can later be verified byte-for-byte.
  */
-import { keccak256, toHex } from "viem";
 
-/** Compute keccak256 over the full bytes of a File/Blob. Returns 0x-prefixed hex. */
+/** Compute SHA-256 over the full bytes of a File/Blob. Returns 0x-prefixed hex. */
 export async function hashFile(file: File | Blob): Promise<`0x${string}`> {
   const buf = await file.arrayBuffer();
-  return keccak256(new Uint8Array(buf));
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return toHex(new Uint8Array(digest));
 }
 
-/** keccak256 of an arbitrary UTF-8 string (used for metadata if ever needed). */
-export function hashString(value: string): `0x${string}` {
-  return keccak256(toHex(value));
+/** SHA-256 of a UTF-8 string. */
+export async function hashString(value: string): Promise<`0x${string}`> {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return toHex(new Uint8Array(digest));
 }
 
-/** Short, human-friendly rendering of a 0x hash or address. */
-export function shorten(hex: string, head = 6, tail = 4): string {
-  if (!hex) return "";
-  if (hex.length <= head + tail + 2) return hex;
-  return `${hex.slice(0, head + 2)}…${hex.slice(-tail)}`;
+function toHex(bytes: Uint8Array): `0x${string}` {
+  let out = "";
+  for (const b of bytes) out += b.toString(16).padStart(2, "0");
+  return `0x${out}`;
+}
+
+/** Short, human-friendly rendering of a hash / address / txid. */
+export function shorten(value: string, head = 6, tail = 4): string {
+  if (!value) return "";
+  const hasPrefix = value.startsWith("0x");
+  const body = hasPrefix ? value.slice(2) : value;
+  if (body.length <= head + tail) return value;
+  const prefix = hasPrefix ? "0x" : "";
+  return `${prefix}${body.slice(0, head)}…${body.slice(-tail)}`;
 }

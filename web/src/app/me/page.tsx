@@ -1,42 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { useAccount } from "wagmi";
+import { useEffect, useState } from "react";
+import { useWallet } from "@/lib/wallet";
 import { PageHeader, EmptyState, Spinner, ErrorNote } from "@/components/ui";
-import { NetworkGuard } from "@/components/NetworkGuard";
+import { WalletGate } from "@/components/WalletGate";
 import { InscriptionCard } from "@/components/InscriptionCard";
-import { useOwnerIds, useInscriptionsByIds } from "@/lib/useRegistry";
+import { listByOwner } from "@/lib/registryClient";
+import type { InscriptionRecord } from "@/lib/types";
 
 export default function MePage() {
   return (
     <div>
       <PageHeader
         title="My Inscriptions"
-        subtitle="Every record tied to your connected address, read from chain."
+        subtitle="Every record tied to your connected address."
         action={
           <Link href="/inscribe" className="btn-primary">
             + Inscribe
           </Link>
         }
       />
-      <NetworkGuard>
+      <WalletGate>
         <MyList />
-      </NetworkGuard>
+      </WalletGate>
     </div>
   );
 }
 
 function MyList() {
-  const { address } = useAccount();
-  const { data: ids, isLoading: idsLoading, error: idsError } = useOwnerIds(address);
+  const { ordinalsAddress } = useWallet();
+  const [records, setRecords] = useState<InscriptionRecord[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Newest first.
-  const ordered = ids ? [...ids].reverse() : undefined;
-  const { records, isLoading } = useInscriptionsByIds(ordered);
+  useEffect(() => {
+    if (!ordinalsAddress) return;
+    setRecords(null);
+    setError(null);
+    listByOwner(ordinalsAddress)
+      .then(setRecords)
+      .catch((e) => setError(e.message));
+  }, [ordinalsAddress]);
 
-  if (idsError) return <ErrorNote message="Failed to read from the contract." />;
+  if (error) return <ErrorNote message={error} />;
 
-  if (idsLoading || (ids && ids.length > 0 && isLoading)) {
+  if (records === null) {
     return (
       <div className="flex items-center gap-2 text-sm text-ink-100/60">
         <Spinner /> Loading your inscriptions…
@@ -44,7 +52,7 @@ function MyList() {
     );
   }
 
-  if (!ids || ids.length === 0) {
+  if (records.length === 0) {
     return (
       <EmptyState
         title="No inscriptions yet"
@@ -60,8 +68,8 @@ function MyList() {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {records?.map((rec) => (
-        <InscriptionCard key={rec.id.toString()} rec={rec} />
+      {records.map((rec) => (
+        <InscriptionCard key={rec.id} rec={rec} />
       ))}
     </div>
   );

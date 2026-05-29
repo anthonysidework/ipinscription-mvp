@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { activeChain } from "@/lib/config";
+import { networkLabel } from "@/lib/config";
 
 export default function LandingPage() {
   return (
     <div className="flex flex-col items-center gap-12 py-10 text-center">
       <div className="max-w-2xl">
         <span className="pill mx-auto mb-5">
-          On-chain proof of authorship · {activeChain.name}
+          On-chain proof of authorship · {networkLabel} · Ordinals
         </span>
         <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Inscribe your IP.
@@ -16,9 +16,10 @@ export default function LandingPage() {
           </span>
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base text-ink-100/70">
-          Upload any file and get a verifiable, timestamped, tamper-proof record
-          of authorship on-chain. Your content is hashed locally, pinned to IPFS,
-          and registered on a public smart contract anyone can verify.
+          Upload any file and inscribe it onto Bitcoin as a verifiable,
+          timestamped, tamper-proof record of authorship. Your content is hashed
+          locally with SHA-256, pinned to IPFS, and inscribed on-chain via your
+          Bitcoin wallet — anyone can verify it.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link href="/app" className="btn-primary px-6 py-3 text-base">
@@ -34,7 +35,7 @@ export default function LandingPage() {
         {[
           {
             t: "1 · Hash",
-            d: "Your file is hashed with keccak256 in your browser. The bytes never need to leave your control.",
+            d: "Your file is hashed with SHA-256 in your browser. The bytes never leave your control unless you choose to pin them.",
           },
           {
             t: "2 · Pin",
@@ -42,7 +43,7 @@ export default function LandingPage() {
           },
           {
             t: "3 · Inscribe",
-            d: "The hash + IPFS pointers are written on-chain with your address and the block timestamp.",
+            d: "An on-chain Ordinals inscription records the hash + IPFS pointers on Bitcoin, with your address and a timestamp.",
           },
         ].map((s) => (
           <div key={s.t} className="card p-5">
@@ -53,7 +54,7 @@ export default function LandingPage() {
       </div>
 
       <p className="text-xs text-ink-100/40">
-        Testnet only · unaudited · not legal advice
+        Testnet only · experimental · not legal advice
       </p>
     </div>
   );

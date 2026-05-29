@@ -6,7 +6,7 @@ import { NavBar } from "@/components/NavBar";
 export const metadata: Metadata = {
   title: "IP Inscription",
   description:
-    "Inscribe your IP on-chain — a verifiable, timestamped, tamper-proof proof of authorship.",
+    "Inscribe your IP onto Bitcoin — a verifiable, timestamped, tamper-proof proof of authorship.",
 };
 
 export default function RootLayout({

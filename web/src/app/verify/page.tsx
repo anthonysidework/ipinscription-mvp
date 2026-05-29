@@ -1,79 +1,45 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { usePublicClient } from "wagmi";
-import { parseAbiItem } from "viem";
 import { PageHeader, Spinner, ErrorNote } from "@/components/ui";
 import { Certificate } from "@/components/Certificate";
-import { registryContract } from "@/lib/contract";
-import type { Inscription } from "@/lib/contract";
-import type { IndexedInscription } from "@/lib/useRegistry";
 import { hashFile, shorten } from "@/lib/hash";
-import { isContractConfigured, contractAddress } from "@/lib/config";
+import { verifyByHash } from "@/lib/registryClient";
+import type { InscriptionRecord } from "@/lib/types";
 
 type Status = "idle" | "hashing" | "checking" | "hit" | "miss" | "error";
 
-const inscribedEvent = parseAbiItem(
-  "event Inscribed(uint256 indexed id, bytes32 indexed contentHash, address indexed owner, string cid, uint256 timestamp)"
-);
-
 export default function VerifyPage() {
-  const publicClient = usePublicClient();
   const [status, setStatus] = useState<Status>("idle");
   const [hash, setHash] = useState<string>("");
-  const [record, setRecord] = useState<IndexedInscription | null>(null);
+  const [record, setRecord] = useState<InscriptionRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const run = useCallback(
-    async (file: File) => {
-      if (!publicClient) return;
-      setError(null);
-      setRecord(null);
-      setFileName(file.name);
-      try {
-        setStatus("hashing");
-        const contentHash = await hashFile(file);
-        setHash(contentHash);
+  const run = useCallback(async (file: File) => {
+    setError(null);
+    setRecord(null);
+    setFileName(file.name);
+    try {
+      setStatus("hashing");
+      const contentHash = await hashFile(file);
+      setHash(contentHash);
 
-        setStatus("checking");
-        const [exists, rec] = (await publicClient.readContract({
-          ...registryContract,
-          functionName: "verify",
-          args: [contentHash],
-        })) as [boolean, Inscription];
-
-        if (!exists) {
-          setStatus("miss");
-          return;
-        }
-
-        // Resolve the id via the indexed event (cheap; contentHash is indexed).
-        let id = 0n;
-        try {
-          const logs = await publicClient.getLogs({
-            address: contractAddress,
-            event: inscribedEvent,
-            args: { contentHash },
-            fromBlock: 0n,
-            toBlock: "latest",
-          });
-          if (logs[0]?.args.id !== undefined) id = logs[0].args.id as bigint;
-        } catch {
-          /* fall back to id 0 if the RPC rejects wide ranges */
-        }
-
-        setRecord({ ...rec, id });
-        setStatus("hit");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Verification failed.");
-        setStatus("error");
+      setStatus("checking");
+      const { exists, record } = await verifyByHash(contentHash);
+      if (!exists || !record) {
+        setStatus("miss");
+        return;
       }
-    },
-    [publicClient]
-  );
+      setRecord(record);
+      setStatus("hit");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed.");
+      setStatus("error");
+    }
+  }, []);
 
   const busy = status === "hashing" || status === "checking";
 
@@ -81,12 +47,8 @@ export default function VerifyPage() {
     <div>
       <PageHeader
         title="Verify"
-        subtitle="Upload a file to check whether it has been inscribed. Nothing is uploaded — the file is hashed locally and the hash is checked against the registry."
+        subtitle="Upload a file to check whether it has been inscribed. The file is hashed locally (SHA-256) and the hash is checked against the registry — the file itself is not uploaded."
       />
-
-      {!isContractConfigured && (
-        <ErrorNote message="Contract address not configured (NEXT_PUBLIC_CONTRACT_ADDRESS)." />
-      )}
 
       <div
         onDragOver={(e) => {

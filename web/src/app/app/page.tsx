@@ -1,52 +1,59 @@
 "use client";
 
 import Link from "next/link";
-import { useAccount } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useEffect, useState } from "react";
+import { useWallet } from "@/lib/wallet";
 import { PageHeader } from "@/components/ui";
-import { useTotal, useOwnerIds } from "@/lib/useRegistry";
-import { activeChain, isContractConfigured } from "@/lib/config";
+import { ConnectButton } from "@/components/ConnectButton";
+import { networkLabel } from "@/lib/config";
+import { listByOwner, listRecords } from "@/lib/registryClient";
 
 export default function DashboardPage() {
-  const { address, isConnected } = useAccount();
-  const { data: total } = useTotal();
-  const { data: ownerIds } = useOwnerIds(address);
+  const { isConnected, ordinalsAddress } = useWallet();
+  const [total, setTotal] = useState<number | null>(null);
+  const [mine, setMine] = useState<number | null>(null);
+
+  useEffect(() => {
+    listRecords(0, 1)
+      .then((r) => setTotal(r.total))
+      .catch(() => setTotal(null));
+  }, []);
+
+  useEffect(() => {
+    if (!ordinalsAddress) {
+      setMine(null);
+      return;
+    }
+    listByOwner(ordinalsAddress)
+      .then((r) => setMine(r.length))
+      .catch(() => setMine(null));
+  }, [ordinalsAddress]);
 
   return (
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle={`Inscribe and manage your proofs of authorship on ${activeChain.name}.`}
+        subtitle={`Inscribe and manage your proofs of authorship on ${networkLabel}.`}
       />
-
-      {!isContractConfigured && (
-        <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          Contract address not set. Add NEXT_PUBLIC_CONTRACT_ADDRESS to
-          web/.env.local and restart the dev server.
-        </div>
-      )}
 
       {!isConnected ? (
         <div className="card flex flex-col items-center gap-4 px-6 py-16 text-center">
-          <p className="text-white">Connect your wallet to get started.</p>
+          <p className="text-white">Connect your Bitcoin wallet to get started.</p>
           <ConnectButton />
         </div>
       ) : (
         <>
           <div className="mb-8 grid gap-4 sm:grid-cols-3">
             <Stat label="Registry total" value={total?.toString() ?? "—"} />
-            <Stat
-              label="Your inscriptions"
-              value={ownerIds ? ownerIds.length.toString() : "—"}
-            />
-            <Stat label="Network" value={activeChain.name} />
+            <Stat label="Your inscriptions" value={mine?.toString() ?? "—"} />
+            <Stat label="Network" value={networkLabel} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <ActionCard
               href="/inscribe"
               title="Inscribe new IP"
-              desc="Upload a file, hash it, pin to IPFS, and register it on-chain."
+              desc="Upload a file, hash it, pin to IPFS, and inscribe it on Bitcoin."
               cta="Start inscribing →"
               primary
             />
@@ -59,7 +66,7 @@ export default function DashboardPage() {
             <ActionCard
               href="/explore"
               title="Explore registry"
-              desc="Browse all public inscriptions on the contract."
+              desc="Browse all public inscriptions made through the app."
               cta="Explore →"
             />
             <ActionCard

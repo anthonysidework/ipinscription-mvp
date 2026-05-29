@@ -2,15 +2,15 @@
 
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
-import { decodeEventLog } from "viem";
+import { useWallet } from "@/lib/wallet";
 import { PageHeader, Spinner, ErrorNote, formatTimestamp } from "@/components/ui";
-import { NetworkGuard } from "@/components/NetworkGuard";
+import { WalletGate } from "@/components/WalletGate";
 import { Certificate } from "@/components/Certificate";
-import { registryContract, registryAbi } from "@/lib/contract";
-import type { IndexedInscription } from "@/lib/useRegistry";
 import { hashFile, shorten } from "@/lib/hash";
 import { pinFile, pinJson } from "@/lib/ipfs";
+import { addRecord, verifyByHash } from "@/lib/registryClient";
+import { networkType, networkLabel } from "@/lib/config";
+import type { InscriptionRecord } from "@/lib/types";
 
 type Stage =
   | "idle"
@@ -18,19 +18,19 @@ type Stage =
   | "checking"
   | "uploading-file"
   | "uploading-meta"
-  | "submitting"
-  | "confirming"
+  | "inscribing"
+  | "indexing"
   | "done"
   | "error";
 
 const STAGE_LABELS: Record<Stage, string> = {
   idle: "",
-  hashing: "Hashing file (keccak256)…",
+  hashing: "Hashing file (SHA-256)…",
   checking: "Checking the registry for duplicates…",
   "uploading-file": "Pinning file to IPFS…",
   "uploading-meta": "Pinning metadata to IPFS…",
-  submitting: "Awaiting wallet signature…",
-  confirming: "Confirming transaction on-chain…",
+  inscribing: "Confirm the inscription in your wallet…",
+  indexing: "Recording in the registry…",
   done: "Inscribed!",
   error: "Something went wrong",
 };
@@ -39,8 +39,8 @@ const STEP_ORDER: Stage[] = [
   "hashing",
   "uploading-file",
   "uploading-meta",
-  "submitting",
-  "confirming",
+  "inscribing",
+  "indexing",
   "done",
 ];
 
@@ -49,35 +49,32 @@ export default function InscribePage() {
     <div>
       <PageHeader
         title="Inscribe"
-        subtitle="Upload a file to create a permanent, timestamped proof of authorship."
+        subtitle={`Upload a file to inscribe a permanent proof of authorship on ${networkLabel}.`}
       />
-      <NetworkGuard>
+      <WalletGate>
         <InscribeForm />
-      </NetworkGuard>
+      </WalletGate>
     </div>
   );
 }
 
 function InscribeForm() {
-  const { address } = useAccount();
-  const publicClient = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
+  const { ordinalsAddress, inscribe } = useWallet();
 
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState("");
+  const [feeRate, setFeeRate] = useState("");
   const [dragging, setDragging] = useState(false);
 
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | undefined>();
-  const [result, setResult] = useState<IndexedInscription | null>(null);
+  const [txid, setTxid] = useState<string | undefined>();
+  const [result, setResult] = useState<InscriptionRecord | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const busy =
-    stage !== "idle" && stage !== "done" && stage !== "error";
+  const busy = stage !== "idle" && stage !== "done" && stage !== "error";
 
   const onPick = useCallback((f: File | null) => {
     setFile(f);
@@ -96,10 +93,10 @@ function InscribeForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !title.trim() || !publicClient || !address) return;
+    if (!file || !title.trim() || !ordinalsAddress) return;
     setError(null);
     setResult(null);
-    setTxHash(undefined);
+    setTxid(undefined);
 
     try {
       // 1. Hash locally.
@@ -108,11 +105,7 @@ function InscribeForm() {
 
       // 2. Pre-check the registry so we fail fast on duplicates.
       setStage("checking");
-      const [exists] = (await publicClient.readContract({
-        ...registryContract,
-        functionName: "verify",
-        args: [contentHash],
-      })) as [boolean, unknown];
+      const { exists } = await verifyByHash(contentHash);
       if (exists) {
         throw new Error(
           "This exact file has already been inscribed. Each file can only be inscribed once."
@@ -135,69 +128,47 @@ function InscribeForm() {
       });
       const metadataURI = `ipfs://${metaCid}`;
 
-      // 5. Submit the transaction.
-      setStage("submitting");
-      const hash = await writeContractAsync({
-        ...registryContract,
-        functionName: "inscribe",
-        args: [contentHash, cid, metadataURI],
-      });
-      setTxHash(hash);
-
-      // 6. Wait for confirmation and pull the new id from the event log.
-      setStage("confirming");
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") {
-        throw new Error("Transaction reverted on-chain.");
-      }
-
-      let newId: bigint | undefined;
-      let blockTs: bigint | undefined;
-      for (const log of receipt.logs) {
-        try {
-          const decoded = decodeEventLog({
-            abi: registryAbi,
-            data: log.data,
-            topics: log.topics,
-          });
-          if (decoded.eventName === "Inscribed") {
-            newId = decoded.args.id as bigint;
-            blockTs = decoded.args.timestamp as bigint;
-            break;
-          }
-        } catch {
-          /* not our event */
-        }
-      }
-
-      if (newId === undefined) {
-        // Fallback: read total - 1.
-        const total = (await publicClient.readContract({
-          ...registryContract,
-          functionName: "total",
-        })) as bigint;
-        newId = total - 1n;
-      }
-      if (blockTs === undefined) {
-        const block = await publicClient.getBlock({
-          blockNumber: receipt.blockNumber,
-        });
-        blockTs = block.timestamp;
-      }
-
-      setResult({
-        id: newId,
+      // 5. Inscribe a compact JSON proof onto Bitcoin. The inscription content is
+      //    small (hash + IPFS pointers), so on-chain cost stays low while the file
+      //    itself lives on IPFS.
+      setStage("inscribing");
+      const proof = JSON.stringify({
+        p: "ip-inscription",
+        v: 1,
         contentHash,
         cid,
         metadataURI,
-        owner: address,
-        timestamp: blockTs,
+        title: title.trim(),
       });
+      const txId = await inscribe({
+        content: proof,
+        contentType: "application/json",
+        payloadType: "PLAIN_TEXT",
+        feeRate: feeRate ? Number(feeRate) : undefined,
+      });
+      setTxid(txId);
+
+      // 6. Record it in our index so Explore + Verify can find it.
+      setStage("indexing");
+      const record = await addRecord({
+        contentHash,
+        cid,
+        metadataURI,
+        owner: ordinalsAddress,
+        txid: txId,
+        inscriptionId: `${txId}i0`,
+        network: networkLabel,
+        title: title.trim(),
+        description: description.trim() || undefined,
+        type: type.trim() || undefined,
+        fileName: file.name,
+        mimeType: file.type || undefined,
+      });
+
+      setResult(record);
       setStage("done");
     } catch (err) {
-      setError(
-        err instanceof Error ? humanizeError(err.message) : "Inscription failed."
-      );
+      setError(err instanceof Error ? err.message : "Inscription failed.");
       setStage("error");
     }
   }
@@ -207,9 +178,10 @@ function InscribeForm() {
     setTitle("");
     setDescription("");
     setType("");
+    setFeeRate("");
     setStage("idle");
     setError(null);
-    setTxHash(undefined);
+    setTxid(undefined);
     setResult(null);
   }
 
@@ -217,11 +189,12 @@ function InscribeForm() {
     return (
       <div className="flex flex-col gap-6">
         <div className="rounded-xl border border-accent-500/40 bg-accent-500/10 px-4 py-3 text-sm text-accent-400">
-          ✓ Inscribed on-chain at {formatTimestamp(result.timestamp)}.
+          ✓ Inscribed on {networkType} at {formatTimestamp(result.timestamp)}. The
+          Bitcoin transaction may take a few minutes to confirm.
         </div>
-        <Certificate rec={result} txHash={txHash} />
+        <Certificate rec={result} />
         <div className="flex flex-wrap gap-3">
-          <Link href={`/inscription/${result.id.toString()}`} className="btn-ghost">
+          <Link href={`/inscription/${result.id}`} className="btn-ghost">
             Open certificate page
           </Link>
           <button onClick={reset} className="btn-primary">
@@ -234,7 +207,7 @@ function InscribeForm() {
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-6 md:grid-cols-2">
-      {/* Upload + preview */}
+      {/* Upload */}
       <div className="flex flex-col gap-4">
         <div
           onDragOver={(e) => {
@@ -315,6 +288,20 @@ function InscribeForm() {
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
+        <div>
+          <label className="label" htmlFor="fee">
+            Miner fee rate (sats/vB, optional)
+          </label>
+          <input
+            id="fee"
+            type="number"
+            min="1"
+            className="input"
+            placeholder="leave blank to let the wallet choose"
+            value={feeRate}
+            onChange={(e) => setFeeRate(e.target.value)}
+          />
+        </div>
 
         <button
           type="submit"
@@ -322,12 +309,12 @@ function InscribeForm() {
           disabled={!file || !title.trim() || busy}
         >
           {busy ? <Spinner /> : null}
-          {busy ? STAGE_LABELS[stage] : "Inscribe on-chain"}
+          {busy ? STAGE_LABELS[stage] : "Inscribe on Bitcoin"}
         </button>
 
         {busy && <ProgressSteps stage={stage} />}
-        {txHash && (
-          <p className="text-xs text-ink-100/50">tx {shorten(txHash, 10, 8)}</p>
+        {txid && (
+          <p className="text-xs text-ink-100/50">tx {shorten(txid, 10, 8)}</p>
         )}
         {error && <ErrorNote message={error} />}
       </div>
@@ -365,14 +352,4 @@ function ProgressSteps({ stage }: { stage: Stage }) {
       })}
     </ol>
   );
-}
-
-function humanizeError(msg: string): string {
-  if (/User rejected|denied|rejected the request/i.test(msg))
-    return "Transaction rejected in wallet.";
-  if (/already inscribed/i.test(msg))
-    return "This exact file has already been inscribed.";
-  if (/insufficient funds/i.test(msg))
-    return "Insufficient testnet ETH to pay for gas. Use a faucet to top up.";
-  return msg;
 }
