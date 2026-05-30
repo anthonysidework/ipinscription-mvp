@@ -13,7 +13,15 @@ export default function LandingPage() {
         <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
           Inscribe your IP.
           <br />
-          <span className="bg-gradient-to-r from-brand-400 to-accent-400 bg-clip-text text-transparent">
+          <span
+            className="inline-block bg-clip-text text-transparent"
+            style={{
+              backgroundImage: "linear-gradient(to right, #8b9cff, #5eead4)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+            }}
+          >
             Prove you made it first.
           </span>
         </h1>
